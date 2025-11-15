@@ -1,3 +1,7 @@
+use petgraph::{
+    graph::{EdgeIndex, NodeIndex},
+    prelude::StableGraph,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -43,9 +47,50 @@ pub struct KindDefinition {
 /// of the data field
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct NodeInstance {
-    pub id: String,
     pub kind: String,
     pub data: HashMap<String, Value>,
+}
+
+impl NodeInstance {
+    pub fn get(&self, field: &str) -> Option<&Value> {
+        self.data.get(field)
+    }
+    pub fn new(kind: String, name: String) -> Self {
+        let mut init = HashMap::new();
+        init.insert("name".into(), Value::String(name));
+        NodeInstance { kind, data: init }
+    }
+    pub fn get_name(&self) -> &String {
+        if let Value::String(name) = self.get("name").unwrap() {
+            return name;
+        }
+        unreachable!("name missing")
+    }
+}
+
+pub trait AddDedup {
+    fn add_edge_s(&mut self, source: NodeIndex, target: NodeIndex, weight: String) -> EdgeIndex;
+    fn add_node_s(&mut self, weight: NodeInstance) -> NodeIndex;
+}
+
+impl AddDedup for StableGraph<NodeInstance, String> {
+    fn add_edge_s(&mut self, source: NodeIndex, target: NodeIndex, weight: String) -> EdgeIndex {
+        let edge = self.find_edge(source, target);
+        match edge {
+            Some(e) => e,
+            None => self.add_edge(source, target, weight),
+        }
+    }
+
+    fn add_node_s(&mut self, weight: NodeInstance) -> NodeIndex {
+        let node = self
+            .node_indices()
+            .find(|node| self[*node].get_name() == weight.get_name());
+        match node {
+            Some(n) => n,
+            None => self.add_node(weight),
+        }
+    }
 }
 
 /// In‑memory registry for all known kinds.
@@ -71,9 +116,10 @@ pub enum ValidationError {
 impl KindRegistry {
     pub fn register_kind(&mut self, kind: KindDefinition) -> Result<(), String> {
         if let Some(parent_name) = &kind.parent
-            && !self.kinds.contains_key(parent_name) {
-                return Err(format!("Parent kind `{parent_name}` is not registered"));
-            }
+            && !self.kinds.contains_key(parent_name)
+        {
+            return Err(format!("Parent kind `{parent_name}` is not registered"));
+        }
 
         if self.kinds.contains_key(&kind.name) {
             return Err(format!("Kind `{}` is already registered", kind.name));

@@ -1,9 +1,13 @@
 mod model;
 
-use crate::model::{Edge, JsonType, KindDefinition, KindRegistry, NodeInstance};
+use crate::model::{AddDedup, JsonType, KindDefinition, KindRegistry, NodeInstance};
+use petgraph::{
+    algo::dijkstra,
+    prelude::*,
+    visit::{Control, DfsEvent, depth_first_search},
+};
 use serde_json::Value;
-use std::collections::HashMap;
-use petgraph::prelude::*;
+use std::{collections::HashMap, rc::Rc};
 
 fn main() {
     // Build a tiny example graph:
@@ -48,6 +52,7 @@ fn main() {
         .expect("register Ingredient kind");
 
     let mut nutrition_fields = HashMap::new();
+    nutrition_fields.insert("name".to_string(), JsonType::String);
     nutrition_fields.insert("kcal".to_string(), JsonType::Number);
     registry
         .register_kind(KindDefinition {
@@ -58,51 +63,11 @@ fn main() {
         .expect("register Nutrition kind");
 
     // Nodes
-    let lasagne = NodeInstance {
-        id: "lasagne".to_string(),
-        kind: "Food".to_string(),
-        data: {
-            let mut d = HashMap::new();
-            d.insert("name".to_string(), Value::String("Lasagne".to_string()));
-            d
-        },
-    };
-
-    let pizza = NodeInstance {
-        id: "pizza-margherita".to_string(),
-        kind: "Food".to_string(),
-        data: {
-            let mut d = HashMap::new();
-            d.insert(
-                "name".to_string(),
-                Value::String("Pizza Margherita".to_string()),
-            );
-            d
-        },
-    };
-
-    let tomatoes = NodeInstance {
-        id: "tomatoes".to_string(),
-        kind: "Ingredient".to_string(),
-        data: {
-            let mut d = HashMap::new();
-            d.insert("name".to_string(), Value::String("Tomatoes".to_string()));
-            d
-        },
-    };
-
-    let tomato_kcal = NodeInstance {
-        id: "tomato-kcal".to_string(),
-        kind: "Nutrition".to_string(),
-        data: {
-            let mut d = HashMap::new();
-            d.insert(
-                "kcal".to_string(),
-                Value::Number(serde_json::Number::from(22)),
-            );
-            d
-        },
-    };
+    let lasagne = NodeInstance::new("Food".into(), "Lasagne".into());
+    let pizza = NodeInstance::new("Food".into(), "Pizza Margherita".into());
+    let tomatoes = NodeInstance::new("Ingredient".into(), "Tomatoes".into());
+    let mut tomato_kcal = NodeInstance::new("Nutrition".into(), "tomatoes-kcal".into());
+    tomato_kcal.data.insert("kcal".into(), Value::Number(22.into()));
 
     // Validate nodes against their kinds
     for node in [&lasagne, &pizza, &tomatoes, &tomato_kcal] {
@@ -116,20 +81,25 @@ fn main() {
     let i_lasagne = graph.add_node(lasagne);
     let i_pizza = graph.add_node(pizza);
     let i_tomatoes = graph.add_node(tomatoes);
-    let i_tomatoes_kcal = graph.add_node(tomato_kcal);
+    let i_tomatoes_kcal = graph.add_node(tomato_kcal.clone());
+    let i_tomatoes_kcal2 = graph.add_node_s(tomato_kcal);
 
     graph.add_edge(i_lasagne, i_tomatoes, "has-ingredient".to_string());
     graph.add_edge(i_pizza, i_tomatoes, "has-ingredient".to_string());
-    graph.add_edge(i_tomatoes, i_tomatoes_kcal, "has-nutrition".to_string());
+    graph.add_edge_s(i_tomatoes, i_tomatoes_kcal, "has-nutrition".to_string());
+    graph.add_edge_s(i_tomatoes, i_tomatoes_kcal2, "has-nutrition".to_string());
 
     // Print a simple overview
     println!("Nodes:");
     for node in graph.clone().into_nodes_edges_iters().0 {
-        println!("- {} ({})", &graph[node.index].id, &graph[node.index].kind);
+        println!("- {} ({})", &graph[node.index].get_name(), &graph[node.index].kind);
     }
 
     println!("\nEdges:");
     for edge in graph.clone().into_nodes_edges_iters().1 {
-        println!("- {} -[{}]-> {}", &graph[edge.source].id, edge.weight, &graph[edge.target].id);
+        println!(
+            "- {} -[{}]-> {}",
+            &graph[edge.source].get_name(), edge.weight, &graph[edge.target].get_name()
+        );
     }
 }
