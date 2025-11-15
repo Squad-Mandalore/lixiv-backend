@@ -1,13 +1,9 @@
 mod model;
 
 use crate::model::{AddDedup, JsonType, KindDefinition, KindRegistry, NodeInstance};
-use petgraph::{
-    algo::dijkstra,
-    prelude::*,
-    visit::{Control, DfsEvent, depth_first_search},
-};
+use petgraph::prelude::*;
 use serde_json::Value;
-use std::{collections::HashMap, rc::Rc};
+use std::collections::HashMap;
 
 fn main() {
     // Build a tiny example graph:
@@ -67,7 +63,9 @@ fn main() {
     let pizza = NodeInstance::new("Food".into(), "Pizza Margherita".into());
     let tomatoes = NodeInstance::new("Ingredient".into(), "Tomatoes".into());
     let mut tomato_kcal = NodeInstance::new("Nutrition".into(), "tomatoes-kcal".into());
-    tomato_kcal.data.insert("kcal".into(), Value::Number(22.into()));
+    tomato_kcal
+        .data
+        .insert("kcal".into(), Value::Number(22.into()));
 
     // Validate nodes against their kinds
     for node in [&lasagne, &pizza, &tomatoes, &tomato_kcal] {
@@ -91,15 +89,22 @@ fn main() {
 
     // Print a simple overview
     println!("Nodes:");
-    for node in graph.clone().into_nodes_edges_iters().0 {
-        println!("- {} ({})", &graph[node.index].get_name(), &graph[node.index].kind);
+    for node_index in graph.node_indices() {
+        println!(
+            "- {} ({})",
+            &graph[node_index].get_name(),
+            &graph[node_index].kind
+        );
     }
 
     println!("\nEdges:");
-    for edge in graph.clone().into_nodes_edges_iters().1 {
+    for edge_index in graph.edge_indices() {
+        let edge_endpoints = graph.edge_endpoints(edge_index).unwrap();
         println!(
             "- {} -[{}]-> {}",
-            &graph[edge.source].get_name(), edge.weight, &graph[edge.target].get_name()
+            &graph[edge_endpoints.0].get_name(),
+            &graph[edge_index],
+            &graph[edge_endpoints.1].get_name()
         );
     }
 }
