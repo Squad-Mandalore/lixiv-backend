@@ -3,6 +3,7 @@ mod model;
 use crate::model::{Edge, JsonType, KindDefinition, KindRegistry, NodeInstance};
 use serde_json::Value;
 use std::collections::HashMap;
+use petgraph::prelude::*;
 
 fn main() {
     // Build a tiny example graph:
@@ -103,25 +104,6 @@ fn main() {
         },
     };
 
-    // Edges
-    let edges = vec![
-        Edge {
-            from: "lasagne".to_string(),
-            to: "tomatoes".to_string(),
-            relation: "has-ingredient".to_string(),
-        },
-        Edge {
-            from: "pizza-margherita".to_string(),
-            to: "tomatoes".to_string(),
-            relation: "has-ingredient".to_string(),
-        },
-        Edge {
-            from: "tomatoes".to_string(),
-            to: "tomato-kcal".to_string(),
-            relation: "has-nutrition".to_string(),
-        },
-    ];
-
     // Validate nodes against their kinds
     for node in [&lasagne, &pizza, &tomatoes, &tomato_kcal] {
         registry
@@ -129,14 +111,25 @@ fn main() {
             .expect("node should be valid");
     }
 
+    let mut graph = StableDiGraph::<NodeInstance, String>::new();
+
+    let i_lasagne = graph.add_node(lasagne);
+    let i_pizza = graph.add_node(pizza);
+    let i_tomatoes = graph.add_node(tomatoes);
+    let i_tomatoes_kcal = graph.add_node(tomato_kcal);
+
+    graph.add_edge(i_lasagne, i_tomatoes, "has-ingredient".to_string());
+    graph.add_edge(i_pizza, i_tomatoes, "has-ingredient".to_string());
+    graph.add_edge(i_tomatoes, i_tomatoes_kcal, "has-nutrition".to_string());
+
     // Print a simple overview
     println!("Nodes:");
-    for node in [&lasagne, &pizza, &tomatoes, &tomato_kcal] {
-        println!("- {} ({})", node.id, node.kind);
+    for node in graph.clone().into_nodes_edges_iters().0 {
+        println!("- {} ({})", &graph[node.index].id, &graph[node.index].kind);
     }
 
     println!("\nEdges:");
-    for edge in &edges {
-        println!("- {} -[{}]-> {}", edge.from, edge.relation, edge.to);
+    for edge in graph.clone().into_nodes_edges_iters().1 {
+        println!("- {} -[{}]-> {}", &graph[edge.source].id, edge.weight, &graph[edge.target].id);
     }
 }

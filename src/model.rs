@@ -41,20 +41,11 @@ pub struct KindDefinition {
 /// It has a unique ID
 /// And a kind which determines the structure
 /// of the data field
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct NodeInstance {
     pub id: String,
     pub kind: String,
     pub data: HashMap<String, Value>,
-}
-
-/// A directed relation between two nodes.
-/// So that the same node instance can be reused by many other node instances
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Edge {
-    pub from: String,
-    pub to: String,
-    pub relation: String,
 }
 
 /// In‑memory registry for all known kinds.
