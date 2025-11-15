@@ -1,0 +1,244 @@
+openapi: 3.1.0
+info:
+  title: LixIv
+  description: Inventory for displaying a horizontal datastructure
+  version: 0.1.0
+  contact:
+    name: Squad Mandalore
+    url: https://github.com/Squad-Mandalore
+
+tags:
+  - name: auth
+  - name: resource
+
+servers:
+  # - url: https://asdf/asdf
+  #   description: Production
+  - url: http://localhost:3000
+    description: Debug
+
+paths:
+  /login:
+    post:
+      tags:
+        - auth
+      operationId: postLogin
+      description: Uses Email and Password to Authenticate
+      requestBody:
+        description: User credentials for logging in
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Login'
+            example:
+              email: user@example.com
+              password: StrongPassword123!
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Token'
+              example:
+                accessToken: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.access
+                refreshToken: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.refresh
+  /refresh:
+    post:
+      tags:
+        - auth
+      operationId: postRefresh
+      description: Refresh expired access token with a valid refresh token
+      requestBody:
+        description: Refresh token used to obtain a new access token
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                refreshToken:
+                  type: string
+                  example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.refresh
+              required:
+                - refreshToken
+              example:
+                refreshToken: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.refresh
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Token'
+              example:
+                accessToken: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.access
+                refreshToken: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.refresh
+  /graphql:
+    post:
+      tags:
+        - resource
+      operationId: postGraphql
+      description: Endpoint for the GraphQL operations
+      security:
+        - bearerAuth: []
+      requestBody:
+        description: Standard GraphQL request body
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GraphQLRequest'
+            example:
+              query: |
+                query GetViewer {
+                  viewer {
+                    id
+                  }
+                }
+              variables:
+                limit: 10
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GraphQLResponse'
+              example:
+                data:
+                  viewer:
+                    id: "user_123"
+                errors: []
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Bearer authentication using JWT access tokens
+  responses:
+    UnauthorizedError:
+      headers:
+        WWW-Authenticate:
+          schema:
+            type: string
+      description: Access token is missing or invalid
+  schemas:
+    Login:
+      type: object
+      description: User credentials used to authenticate with the API
+      properties:
+        email:
+          type: string
+          format: email
+          example: user@example.com
+        password:
+          type: string
+          format: password
+          example: StrongPassword123!
+      required:
+        - email
+        - password
+      example:
+        email: user@example.com
+        password: StrongPassword123!
+    Token:
+      type: object
+      description: Pair of JWT tokens used to authorize and refresh requests
+      properties:
+        accessToken:
+          type: string
+          example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.access
+        refreshToken:
+          type: string
+          example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.refresh
+      required:
+        - accessToken
+        - refreshToken
+      example:
+        accessToken: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.access
+        refreshToken: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.refresh
+    GraphQLRequest:
+      type: object
+      description: Standard GraphQL request payload
+      properties:
+        query:
+          type: string
+          example: |
+            query GetViewer {
+              viewer {
+                id
+              }
+            }
+        variables:
+          type: object
+          example:
+            limit: 10
+      required:
+        - query
+      example:
+        query: |
+          query GetViewer {
+            viewer {
+              id
+            }
+          }
+        variables:
+          limit: 10
+    GraphQLResponse:
+      type: object
+      description: Standard GraphQL response payload
+      properties:
+        data:
+          type:
+            - object
+            - 'null'
+          example:
+            viewer:
+              id: user_123
+        errors:
+          type: array
+          items:
+            $ref: '#/components/schemas/GraphQLError'
+          example:
+            - message: "Field 'viewer' not found"
+              location:
+                - line: 2
+                  column: 11
+              path:
+                - query
+                - viewer
+      required:
+        - data
+    GraphQLError:
+      type: object
+      description: GraphQL error entry conforming to the GraphQL specification
+      properties:
+        message:
+          type: string
+        location:
+          type: array
+          items:
+            type: object
+            properties:
+              line:
+                type: integer
+              column:
+                type: integer
+            required:
+              - line
+              - column
+        path:
+          type: array
+          items:
+            type: string
+        extensions:
+          type: object
+      required:
+        - message
+        - location
