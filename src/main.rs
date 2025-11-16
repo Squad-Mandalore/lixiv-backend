@@ -1,9 +1,6 @@
-mod model;
-
-use crate::model::{AddDedup, JsonType, KindDefinition, KindRegistry, NodeInstance};
+use lixiv_backend::prelude::*;
 use petgraph::prelude::*;
-use serde_json::Value;
-use std::collections::HashMap;
+use serde_json::{Value, json};
 
 fn main() {
     // Build a tiny example graph:
@@ -24,48 +21,61 @@ fn main() {
     //   pizza-margherita -> tomatoes (ingredient-of)
     //   tomatoes -> lasagne-kcal (nutrition-of)
 
-    let mut registry = KindRegistry::default();
+    let mut registry = SchemaRegistry::default();
 
-    // Define kinds
-    let mut food_fields = HashMap::new();
-    food_fields.insert("name".to_string(), JsonType::String);
-    registry
-        .register_kind(KindDefinition {
-            name: "Food".to_string(),
-            parent: None,
-            fields: food_fields,
-        })
-        .expect("register Food kind");
+    let payload = json!({
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$id": "https://example.com/food.schema.json",
+        "title": "Food",
+        "description": "Food",
+        "type": "object",
+        "properties": {
+            "name": {
+                "type": "string"
+            },
+        },
+        "required": [ "name" ]
+    });
+    let _ = registry.insert(&payload);
 
-    let mut ingredient_fields = HashMap::new();
-    ingredient_fields.insert("name".to_string(), JsonType::String);
-    registry
-        .register_kind(KindDefinition {
-            name: "Ingredient".to_string(),
-            parent: Some("Food".to_string()),
-            fields: ingredient_fields,
-        })
-        .expect("register Ingredient kind");
+    let payload = json!({
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$id": "https://example.com/ingredient.schema.json",
+        "title": "Ingredient",
+        "description": "Ingredient",
+        "type": "object",
+        "properties": {
+            "name": {
+                "type": "string"
+            },
+        },
+        "required": [ "name" ]
+    });
+    let _ = registry.insert(&payload);
 
-    let mut nutrition_fields = HashMap::new();
-    nutrition_fields.insert("name".to_string(), JsonType::String);
-    nutrition_fields.insert("kcal".to_string(), JsonType::Number);
-    registry
-        .register_kind(KindDefinition {
-            name: "Nutrition".to_string(),
-            parent: Some("Ingredient".to_string()),
-            fields: nutrition_fields,
-        })
-        .expect("register Nutrition kind");
-
+    let payload = json!({
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$id": "https://example.com/nutrition.schema.json",
+        "title": "Nutrition",
+        "description": "Nutrition",
+        "type": "object",
+        "properties": {
+            "name": {
+                "type": "string",
+            },
+            "kcal": {
+                "type": "integer"
+            }
+        },
+        "required": [ "name" ]
+    });
+    let _ = registry.insert(&payload);
     // Nodes
-    let lasagne = NodeInstance::new("Food".into(), "Lasagne".into());
-    let pizza = NodeInstance::new("Food".into(), "Pizza Margherita".into());
-    let tomatoes = NodeInstance::new("Ingredient".into(), "Tomatoes".into());
-    let mut tomato_kcal = NodeInstance::new("Nutrition".into(), "tomatoes-kcal".into());
-    tomato_kcal
-        .data
-        .insert("kcal".into(), Value::Number(22.into()));
+    let lasagne = NodeInstance::new("Food", "Lasagne");
+    let pizza = NodeInstance::new("Food", "Pizza Margherita");
+    let tomatoes = NodeInstance::new("Ingredient", "Tomatoes");
+    let mut tomato_kcal = NodeInstance::new("Nutrition", "tomatoes-kcal");
+    tomato_kcal.insert("kcal", Value::Number(22.into()));
 
     // Validate nodes against their kinds
     for node in [&lasagne, &pizza, &tomatoes, &tomato_kcal] {
@@ -92,8 +102,8 @@ fn main() {
     for node_index in graph.node_indices() {
         println!(
             "- {} ({})",
-            &graph[node_index].get_name(),
-            &graph[node_index].kind
+            &graph[node_index].name(),
+            &graph[node_index].schema()
         );
     }
 
@@ -102,9 +112,9 @@ fn main() {
         let edge_endpoints = graph.edge_endpoints(edge_index).unwrap();
         println!(
             "- {} -[{}]-> {}",
-            &graph[edge_endpoints.0].get_name(),
+            &graph[edge_endpoints.0].name(),
             &graph[edge_index],
-            &graph[edge_endpoints.1].get_name()
+            &graph[edge_endpoints.1].name()
         );
     }
 }
