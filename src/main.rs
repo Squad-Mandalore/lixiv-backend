@@ -1,120 +1,96 @@
-use lixiv_backend::prelude::*;
-use petgraph::prelude::*;
-use serde_json::{Value, json};
+use axum::{Extension, Router, middleware, routing::post};
+use lixiv_backend::{database::set_up_database, graphql::{create_schema, graphql_handler}};
+use sqlx::PgPool;
+use tokio::signal;
+use tower_http::cors;
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
-fn main() {
-    // Build a tiny example graph:
-    //
-    // Kinds:
-    //   Food
-    //     └─ Ingredient
-    //          └─ Nutrition
-    //
-    // Nodes:
-    //   lasagne (Food)
-    //   pizza-margherita (Food)
-    //   tomatoes (Ingredient)
-    //   lasagne-kcal (Nutrition)
-    //
-    // Edges:
-    //   lasagne -> tomatoes (ingredient-of)
-    //   pizza-margherita -> tomatoes (ingredient-of)
-    //   tomatoes -> lasagne-kcal (nutrition-of)
+#[cfg(debug_assertions)]
+async fn graphql_playground() -> impl axum::response::IntoResponse {
+    use async_graphql::http::{playground_source, GraphQLPlaygroundConfig};
+    axum::response::Html(playground_source(GraphQLPlaygroundConfig::new("/graphql")))
+}
 
-    let mut registry = SchemaRegistry::default();
+#[tokio::main]
+async fn main() {
+    // setup tracing
+    tracing_subscriber::registry()
+        .with(
+            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+                format!(
+                    "{}=debug,tower_http=debug,axum::rejection=trace",
+                    env!("CARGO_CRATE_NAME")
+                )
+                .into()
+            }),
+        )
+        .with(tracing_subscriber::fmt::layer())
+        .init();
 
-    let payload = json!({
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "$id": "https://example.com/food.schema.json",
-        "title": "Food",
-        "description": "Food",
-        "type": "object",
-        "properties": {
-            "name": {
-                "type": "string"
-            },
-        },
-        "required": [ "name" ]
-    });
-    let _ = registry.insert(&payload);
+    // setup database connection pool
+    let database_pool = set_up_database().await;
+    let app = app(database_pool);
 
-    let payload = json!({
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "$id": "https://example.com/ingredient.schema.json",
-        "title": "Ingredient",
-        "description": "Ingredient",
-        "type": "object",
-        "properties": {
-            "name": {
-                "type": "string"
-            },
-        },
-        "required": [ "name" ]
-    });
-    let _ = registry.insert(&payload);
+    #[cfg(debug_assertions)]
+    let app = debug_route(app);
 
-    let payload = json!({
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "$id": "https://example.com/nutrition.schema.json",
-        "title": "Nutrition",
-        "description": "Nutrition",
-        "type": "object",
-        "properties": {
-            "name": {
-                "type": "string",
-            },
-            "kcal": {
-                "type": "integer"
-            }
-        },
-        "required": [ "name" ]
-    });
-    let _ = registry.insert(&payload);
-    // Nodes
-    let lasagne = NodeInstance::new("Food", "Lasagne");
-    let pizza = NodeInstance::new("Food", "Pizza Margherita");
-    let tomatoes = NodeInstance::new("Ingredient", "Tomatoes");
-    let mut tomato_kcal = NodeInstance::new("Nutrition", "tomatoes-kcal");
-    tomato_kcal.insert("kcal", Value::Number(22.into()));
+    // run our app with hyper, listening globally on port 3000
+    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
+    tracing::info!("listening on {}", listener.local_addr().unwrap());
+    axum::serve(listener, app)
+        .with_graceful_shutdown(shutdown_signal())
+        .await
+        .unwrap();
+}
 
-    // Validate nodes against their kinds
-    for node in [&lasagne, &pizza, &tomatoes, &tomato_kcal] {
-        registry
-            .validate_instance(node)
-            .expect("node should be valid");
+fn app(database_pool: PgPool) -> Router {
+    let schema = create_schema(database_pool.clone());
+
+    let cors = cors::CorsLayer::new()
+        // allow `POST` when accessing the resource
+        .allow_methods([hyper::Method::POST])
+        .allow_headers([http::header::AUTHORIZATION, http::header::CONTENT_TYPE])
+        // allow requests from any origin
+        .allow_origin(cors::Any);
+
+    // build our application with a single route
+    Router::new()
+        .route(
+            "/graphql",
+            post(graphql_handler)//.layer(middleware::from_fn(auth)),
+        )
+        .layer(Extension(schema))
+        // .route("/login", post(login))
+        // .route("/refresh", post(refresh))
+        .with_state(database_pool)
+        .layer(cors)
+}
+
+pub async fn shutdown_signal() {
+    let ctrl_c = async {
+        signal::ctrl_c()
+            .await
+            .expect("failed to install Ctrl+C handler");
+    };
+
+    let terminate = async {
+        signal::unix::signal(signal::unix::SignalKind::terminate())
+            .expect("failed to install signal handler")
+            .recv()
+            .await;
+    };
+
+    tokio::select! {
+        _ = ctrl_c => {},
+        _ = terminate => {},
     }
+}
 
-    let mut graph = StableDiGraph::<NodeInstance, String>::new();
+#[cfg(debug_assertions)]
+fn debug_route(app: Router) -> Router {
+    use axum::routing::get;
+    let debug = Router::new()
+        .route("/playground", get(graphql_playground));
 
-    let i_lasagne = graph.add_node(lasagne);
-    let i_pizza = graph.add_node(pizza);
-    let i_tomatoes = graph.add_node(tomatoes);
-    let i_tomatoes_kcal = graph.add_node(tomato_kcal.clone());
-    let i_tomatoes_kcal2 = graph.add_node_s(tomato_kcal);
-
-    graph.add_edge(i_lasagne, i_tomatoes, "has-ingredient".to_string());
-    graph.add_edge(i_pizza, i_tomatoes, "has-ingredient".to_string());
-    graph.add_edge_s(i_tomatoes, i_tomatoes_kcal, "has-nutrition".to_string());
-    graph.add_edge_s(i_tomatoes, i_tomatoes_kcal2, "has-nutrition".to_string());
-
-    // Print a simple overview
-    println!("Nodes:");
-    for node_index in graph.node_indices() {
-        println!(
-            "- {} ({})",
-            &graph[node_index].name(),
-            &graph[node_index].schema()
-        );
-    }
-
-    println!("\nEdges:");
-    for edge_index in graph.edge_indices() {
-        let edge_endpoints = graph.edge_endpoints(edge_index).unwrap();
-        println!(
-            "- {} -[{}]-> {}",
-            &graph[edge_endpoints.0].name(),
-            &graph[edge_index],
-            &graph[edge_endpoints.1].name()
-        );
-    }
+    app.nest("/debug", debug)
 }
