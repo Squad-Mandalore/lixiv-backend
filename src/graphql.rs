@@ -2,12 +2,18 @@ use async_graphql::{EmptySubscription, MergedObject, Schema, extensions::Logger}
 use async_graphql_axum::{GraphQLRequest, GraphQLResponse};
 use axum::Extension;
 
-#[derive(MergedObject, Default)]
-pub struct Query(
-);
+mod edge;
+mod node;
+mod schema;
 
-#[derive(MergedObject, Default)]
+#[derive(Default, MergedObject)]
+pub struct Query(schema::Schema, node::Node, edge::Edge);
+
+#[derive(Default, MergedObject)]
 pub struct Mutation(
+    schema::SchemaMutation,
+    node::NodeMutation,
+    edge::EdgeMutation,
 );
 
 pub type SchemaType = Schema<Query, Mutation, EmptySubscription>;
@@ -23,11 +29,5 @@ pub async fn graphql_handler(
     schema: Extension<SchemaType>,
     request: GraphQLRequest,
 ) -> GraphQLResponse {
-    schema
-        .execute(
-            request
-                .into_inner()
-        )
-        .await
-        .into()
+    schema.execute(request.into_inner()).await.into()
 }

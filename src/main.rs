@@ -1,5 +1,8 @@
-use axum::{Extension, Router, middleware, routing::post};
-use lixiv_backend::{database::set_up_database, graphql::{create_schema, graphql_handler}};
+use axum::{Extension, Router, routing::post}; // middleware,
+use lixiv_backend::{
+    database::set_up_database,
+    graphql::{create_schema, graphql_handler},
+};
 use sqlx::PgPool;
 use tokio::signal;
 use tower_http::cors;
@@ -7,7 +10,7 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[cfg(debug_assertions)]
 async fn graphql_playground() -> impl axum::response::IntoResponse {
-    use async_graphql::http::{playground_source, GraphQLPlaygroundConfig};
+    use async_graphql::http::{GraphQLPlaygroundConfig, playground_source};
     axum::response::Html(playground_source(GraphQLPlaygroundConfig::new("/graphql")))
 }
 
@@ -57,7 +60,7 @@ fn app(database_pool: PgPool) -> Router {
     Router::new()
         .route(
             "/graphql",
-            post(graphql_handler)//.layer(middleware::from_fn(auth)),
+            post(graphql_handler), //.layer(middleware::from_fn(auth)),
         )
         .layer(Extension(schema))
         // .route("/login", post(login))
@@ -89,8 +92,7 @@ pub async fn shutdown_signal() {
 #[cfg(debug_assertions)]
 fn debug_route(app: Router) -> Router {
     use axum::routing::get;
-    let debug = Router::new()
-        .route("/playground", get(graphql_playground));
+    let debug = Router::new().route("/playground", get(graphql_playground));
 
     app.nest("/debug", debug)
 }
