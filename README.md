@@ -8,7 +8,8 @@ The application uses dotenvy to get the environment varaibles.
 To add your database url do (never push your .env file):
 
 ```
-echo DATABASE_URL=postgres://username:password@localhost/database_name > .env
+echo "export DATABASE_URL=postgres://username:password@localhost/database_name" > .env
+source .env
 ```
 
 ```
