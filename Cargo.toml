@@ -9,7 +9,7 @@ async-graphql = { version = "7.0.17", features = ["log"] }
 async-graphql-axum = "7.0.17"
 axum = { version = "0.8.7", features = ["tracing"] }
 axum-extra = { version = "0.12.2", features = ["typed-header"] }
-chrono = { version = "0.4.38", features = ["serde"] }
+chrono = { version = "0.4.42", features = ["serde"] }
 http = "1.4.0"
 hyper = "1.8.1"
 jsonschema = "0.34.0"
